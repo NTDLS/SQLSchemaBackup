@@ -19,8 +19,7 @@ namespace SQLSchemaBackup
         public List<string> IncludeDatabases = new();
         public List<string> ExcludeDatabases = new();
         public int Parallel = 4;
-        public string UserName = string.Empty;
-        public string DomainName = string.Empty;
+        public string Login = string.Empty;
         public string Password = string.Empty;
         public bool Quiet;
 
@@ -32,7 +31,7 @@ namespace SQLSchemaBackup
             ["include"] = ('i', true),
             ["exclude"] = ('x', true),
             ["parallel"] = ('p', true),
-            ["user"] = ('u', true),
+            ["login"] = ('l', true),
             ["password"] = ('\0', true),
             ["quiet"] = ('q', false),
             ["version"] = ('v', false),
@@ -47,8 +46,6 @@ namespace SQLSchemaBackup
             ["/Include:"] = "include",
             ["/Exclude:"] = "exclude",
             ["/Threads:"] = "parallel",
-            ["/User:"] = "user",
-            ["/Password:"] = "password",
         };
 
         public static ParseOutcome Parse(string[] args, out BackupSettings settings, out string message)
@@ -85,6 +82,10 @@ namespace SQLSchemaBackup
                         if (info.Short == char.ToLowerInvariant(arg[1]) && info.Short != '\0') { name = key; break; }
                     if (name == null)
                         return Fail(out message, $"Unknown option: {arg}");
+                }
+                else if (arg.StartsWith("/User:", StringComparison.OrdinalIgnoreCase) || arg.StartsWith("/Password:", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Fail(out message, "/User and /Password (Windows impersonation) were removed. Run the tool as that account, or use --login for SQL authentication");
                 }
                 else if (arg.StartsWith('/'))
                 {
@@ -130,15 +131,7 @@ namespace SQLSchemaBackup
                         if (!int.TryParse(value, out settings.Parallel) || settings.Parallel < 1)
                             return Fail(out message, $"--parallel must be a whole number of 1 or more, not [{value}].");
                         break;
-                    case "user":
-                        settings.UserName = value;
-                        int slash = value.IndexOf('\\');
-                        if (slash > 0)
-                        {
-                            settings.DomainName = value.Substring(0, slash);
-                            settings.UserName = value.Substring(slash + 1);
-                        }
-                        break;
+                    case "login": settings.Login = value; break;
                 }
             }
 
@@ -176,9 +169,9 @@ namespace SQLSchemaBackup
               -i, --include <patterns>  Only back up databases matching these names (* wildcards).
               -x, --exclude <patterns>  Skip databases matching these names (* wildcards).
               -p, --parallel <n>        Servers to back up at the same time (default 4).
-              -u, --user <[DOMAIN\]name>
-                                        Run as this Windows account instead of the current one.
-              --password <text>         Password for --user. Prefer the SQLSCHEMABACKUP_PASSWORD
+              -l, --login <name>        Connect with this SQL Server login instead of Windows
+                                        authentication (the current Windows account).
+              --password <text>         Password for --login. Prefer the SQLSCHEMABACKUP_PASSWORD
                                         environment variable, or omit it to be prompted.
               -q, --quiet               Only report errors.
               -v, --version             Show the version.

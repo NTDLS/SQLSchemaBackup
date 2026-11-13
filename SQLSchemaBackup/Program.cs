@@ -39,32 +39,17 @@ namespace SQLSchemaBackup
 
             try
             {
-                Impersonation impersonation = null;
-                if (settings.UserName.Length > 0)
+                if (settings.Login.Length > 0 && settings.Password.Length == 0)
                 {
-                    if (!OperatingSystem.IsWindows())
+                    if (Console.IsInputRedirected)
                     {
-                        Console.Error.WriteLine("--user is only supported on Windows.");
+                        Console.Error.WriteLine($"No password for --login. Set {BackupSettings.PasswordEnvironmentVariable} or use --password.");
                         return 2;
                     }
-
-                    if (settings.Password.Length == 0)
-                    {
-                        if (Console.IsInputRedirected)
-                        {
-                            Console.Error.WriteLine($"No password for --user. Set {BackupSettings.PasswordEnvironmentVariable} or use --password.");
-                            return 2;
-                        }
-                        settings.Password = ReadPassword($"Password for {settings.UserName}: ");
-                    }
-
-                    impersonation = new Impersonation(settings.UserName, settings.DomainName, settings.Password);
+                    settings.Password = ReadPassword($"Password for {settings.Login}: ");
                 }
 
-                using (impersonation)
-                {
-                    BackupServers(settings, impersonation).GetAwaiter().GetResult();
-                }
+                BackupServers(settings).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -89,7 +74,7 @@ namespace SQLSchemaBackup
             return sb.ToString();
         }
 
-        private static async Task BackupServers(BackupSettings settings, Impersonation impersonation)
+        private static async Task BackupServers(BackupSettings settings)
         {
             using var gate = new SemaphoreSlim(settings.Parallel);
 
@@ -98,14 +83,8 @@ namespace SQLSchemaBackup
                 await gate.WaitAsync();
                 try
                 {
-                    // Dedicated thread so the impersonated identity applies to the whole server run.
-                    await Task.Factory.StartNew(() =>
-                    {
-                        if (impersonation != null && OperatingSystem.IsWindows())
-                            impersonation.Run(() => BackupServer(settings, serverName));
-                        else
-                            BackupServer(settings, serverName);
-                    }, TaskCreationOptions.LongRunning);
+                    // SMO is synchronous, so give each server its own thread.
+                    await Task.Factory.StartNew(() => BackupServer(settings, serverName), TaskCreationOptions.LongRunning);
                 }
                 finally
                 {
@@ -120,15 +99,24 @@ namespace SQLSchemaBackup
         {
             try
             {
-                var connectionString = new SqlConnectionStringBuilder
+                var builder = new SqlConnectionStringBuilder
                 {
                     DataSource = serverName,
-                    IntegratedSecurity = true,
                     TrustServerCertificate = true,
                     ApplicationName = "SQLSchemaBackup"
-                }.ConnectionString;
+                };
 
-                using var sqlConnection = new SqlConnection(connectionString);
+                if (settings.Login.Length > 0)
+                {
+                    builder.UserID = settings.Login;
+                    builder.Password = settings.Password;
+                }
+                else
+                {
+                    builder.IntegratedSecurity = true;
+                }
+
+                using var sqlConnection = new SqlConnection(builder.ConnectionString);
                 sqlConnection.Open();
 
                 var smoServer = new Server(new ServerConnection(sqlConnection));

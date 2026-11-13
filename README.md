@@ -4,7 +4,7 @@ A simple console utility to backup the schema of SQL Server databases.
 ![SQLSchemaBackup](https://github.com/user-attachments/assets/4632b432-46fa-4867-befa-55cae5e0a7ea)
 
 ## Requirements
-.NET 10 runtime. Connects with Windows (integrated) authentication, and trusts the server certificate.
+.NET 10 runtime. Connects with Windows authentication by default, or SQL Server authentication with `--login`. The server certificate is always trusted.
 
 ## Usage
 ```
@@ -18,8 +18,8 @@ SQLSchemaBackup --server <names> --output <folder> [options]
 | `-i`, `--include <patterns>` | Only back up databases matching these names. `*` wildcards allowed. |
 | `-x`, `--exclude <patterns>` | Skip databases matching these names. `*` wildcards allowed. |
 | `-p`, `--parallel <n>` | Servers to back up at the same time (default 4). |
-| `-u`, `--user <[DOMAIN\]name>` | Run as this Windows account instead of the current one. |
-| `--password <text>` | Password for `--user`. Prefer the `SQLSCHEMABACKUP_PASSWORD` environment variable, or omit it to be prompted. |
+| `-l`, `--login <name>` | Connect with this SQL Server login instead of Windows authentication (the current Windows account). |
+| `--password <text>` | Password for `--login`. Prefer the `SQLSCHEMABACKUP_PASSWORD` environment variable, or omit it to be prompted. |
 | `-q`, `--quiet` | Only report errors. |
 | `-v`, `--version` | Show the version. |
 | `-h`, `--help` | Show help. |
@@ -44,4 +44,6 @@ Each database is written to `<output>\<server>\<database>\` as numbered `.sql` f
 | 2 | Invalid usage |
 
 ## Upgrading from earlier versions
-The old `/Servers:`, `/Folder:`, `/Include:`, `/Exclude:`, `/Threads:`, `/User:` and `/Password:` switches still work so existing scheduled tasks keep running, but they are deprecated; `/Threads:` is now `--parallel`, `/Folder:` is `--output` and `/Servers:` is `--server`.
+The old `/Servers:`, `/Folder:`, `/Include:`, `/Exclude:` and `/Threads:` switches still work so existing scheduled tasks keep running, but they are deprecated; `/Threads:` is now `--parallel`, `/Folder:` is `--output` and `/Servers:` is `--server`.
+
+`/User:` and `/Password:` (Windows impersonation) were removed. To connect as a different Windows account, run the tool as that account (for example `runas` or a scheduled task identity); to use a SQL Server login, use `--login`.

@@ -8,3 +8,7 @@
 *.pdb
 *.exe
 *.ilk
+
+bin/
+obj/
+.vs/
